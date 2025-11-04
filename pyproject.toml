@@ -1,0 +1,16 @@
+[project]
+name = "log-analyzer"
+version = "0.1.0"
+description = "CLI utilities for exploring Palo Alto Networks syslog exports"
+requires-python = ">=3.11"
+dependencies = [
+    "polars>=0.20",
+    "typer>=0.12",
+    "rich>=13.7",
+]
+
+[project.scripts]
+log-analyzer = "log_analyzer.cli:cli"
+
+[tool.uv]
+package = true
