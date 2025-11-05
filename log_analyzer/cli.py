@@ -16,6 +16,7 @@ from .parsers import ParseStats
 from .parsers.palo_alto import PaloAltoParser
 from .parsers.unifi import UniFiParser
 from .parsers.watchguard import WatchGuardParser
+from .parsers.meraki import MerakiParser
 
 console = Console()
 app = typer.Typer(help="Multi-format log analyzer supporting various network device logs")
@@ -699,6 +700,70 @@ def watchguard_command(
 ) -> None:
     """Analyse WatchGuard firewall syslog logs."""
     run_watchguard_analysis(path, top, noise_threshold, progress, export)
+
+
+def run_meraki_analysis(
+    path: Path,
+    top: int,
+    noise_threshold: float,
+    progress: bool,
+    export_path: Path | None = None,
+) -> None:
+    """Run analysis for Meraki logs."""
+    parser = MerakiParser()
+    frame, stats = parser.load_dataframe(path, show_progress=progress)
+
+    if stats.parsed == 0:
+        typer.echo(f"No records parsed from {path} (checked {stats.total_lines} lines).", err=True)
+        raise typer.Exit(code=1)
+
+    # Collect all report data
+    report = ReportData(
+        source_path=path,
+        generated_at=datetime.now(),
+        stats=stats,
+        parser_name=parser.name,
+    )
+
+    # Collect sections specific to Meraki logs
+    sections = [
+        collect_top_counts(frame, "event_type", top=top, title="Event types"),
+        collect_top_counts(frame, "category", top=top, title="Event categories"),
+        collect_top_counts(frame, "log_level", top=top, title="Log levels"),
+        collect_top_counts(frame, "protocol", top=top, title="Top protocols"),
+        collect_top_counts(frame, "src", top=top, title="Top source IPs"),
+        collect_top_counts(frame, "dst", top=top, title="Top destination IPs"),
+        collect_top_counts(frame, "dport", top=top, title="Top destination ports"),
+        collect_trend(frame, top=top),
+        collect_noise_candidates(frame, "event_type", noise_threshold),
+        collect_noise_candidates(frame, "src", noise_threshold),
+        collect_noise_candidates(frame, "dst", noise_threshold),
+    ]
+
+    report.sections = [s for s in sections if s is not None]
+
+    # Export or print
+    if export_path:
+        export_report(report, export_path)
+        console.print(f"[green]Report exported to {export_path}[/green]")
+    else:
+        print_report(report)
+
+
+@app.command("meraki")
+def meraki_command(
+    path: Path = typer.Argument(..., exists=True, file_okay=True, dir_okay=False, readable=True, help="Path to a Meraki network device syslog export"),
+    top: int = typer.Option(10, help="Number of rows to show in each summary table."),
+    noise_threshold: float = typer.Option(
+        5.0,
+        min=0.0,
+        help="Flag event types/IPs whose count is at least this percentage of total volume.",
+    ),
+    progress: bool = typer.Option(True, "--progress/--no-progress", help="Display a progress bar while parsing the log."),
+    export: Path | None = typer.Option(None, "--export", "-o", help="Export report to file (.html, .md, or .json)"),
+) -> None:
+    """Analyse Meraki network device syslog logs."""
+    run_meraki_analysis(path, top, noise_threshold, progress, export)
 
 
 def cli() -> None:
