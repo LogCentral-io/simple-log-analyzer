@@ -1,4 +1,7 @@
-# Multi-Format Log Analyzer
+# Simple - Multi-Format - Log Analyzer
+
+<img width="1536" height="1024" alt="image-log-analyzer" src="https://github.com/user-attachments/assets/2beb17c1-025e-4f13-bc85-7f402836d49b" />
+
 
 A high-performance Python tool for analyzing syslog files from various network devices. Built with Polars for fast processing of large log files.
 
