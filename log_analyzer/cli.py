@@ -58,10 +58,7 @@ def format_trend(frame: pl.DataFrame, top: int) -> None:
     if not len(trend):
         return
 
-    rows = [
-        [bucket.strftime("%Y-%m-%d %H:%M"), f"{count}"]
-        for bucket, count in trend.iter_rows()
-    ]
+    rows = [[bucket.strftime("%Y-%m-%d %H:%M"), f"{count}"] for bucket, count in trend.iter_rows()]
     console.print(to_table("Volume per minute", ["Minute", "Events"], rows[:top]))
 
 
@@ -156,6 +153,7 @@ def render_noise_candidates(
 @dataclass
 class ReportData:
     """Collected data for analysis report."""
+
     source_path: Path
     generated_at: datetime
     stats: ParseStats
@@ -195,7 +193,7 @@ def collect_top_counts(
         bytes_val = values.get("bytes")
         row_data = {
             column: str(values[column] or "<missing>"),
-            "events": values['events'],
+            "events": values["events"],
         }
         if "bytes" in aggregation.columns:
             row_data["bytes"] = bytes_val
@@ -226,10 +224,7 @@ def collect_trend(frame: pl.DataFrame, top: int) -> dict | None:
     if not len(trend):
         return None
 
-    rows = [
-        {"minute": bucket.strftime("%Y-%m-%d %H:%M"), "events": count}
-        for bucket, count in trend.iter_rows()
-    ]
+    rows = [{"minute": bucket.strftime("%Y-%m-%d %H:%M"), "events": count} for bucket, count in trend.iter_rows()]
     return {
         "title": "Volume per minute",
         "columns": ["Minute", "Events"],
@@ -267,8 +262,8 @@ def collect_noise_candidates(
     rows = [
         {
             column: str(values[column] or "<missing>"),
-            "events": values['events'],
-            "share": values['share'],
+            "events": values["events"],
+            "share": values["share"],
         }
         for values in aggregation.iter_rows(named=True)
     ]
@@ -290,7 +285,9 @@ def print_report(report: ReportData) -> None:
 
         # Add helpful note for UniFi logs with JSON data
         if "json-data" in report.stats.rejected and report.parser_name == "UniFi":
-            console.print("  [dim]Note: UniFi logs often include JSON configuration data (this is normal)[/dim]", style="yellow")
+            console.print(
+                "  [dim]Note: UniFi logs often include JSON configuration data (this is normal)[/dim]", style="yellow"
+            )
 
     for section in report.sections:
         # Convert section data to table format for printing
@@ -434,7 +431,16 @@ def export_to_markdown(report: ReportData, path: Path) -> None:
 
         # Create table header
         md += "| " + " | ".join(section["columns"]) + " |\n"
-        md += "|" + "|".join([" ---: " if any(x in col for x in ["Events", "Bytes", "Share"]) else " --- " for col in section["columns"]]) + "|\n"
+        md += (
+            "|"
+            + "|".join(
+                [
+                    " ---: " if any(x in col for x in ["Events", "Bytes", "Share"]) else " --- "
+                    for col in section["columns"]
+                ]
+            )
+            + "|\n"
+        )
 
         # Create table rows
         for row in section["rows"]:
@@ -544,15 +550,14 @@ def run_palo_analysis(
             .head(top)
             .collect()
         )
-        rows = [
-            {"characteristic": value or "<blank>", "events": events}
-            for value, events in exploded.iter_rows()
-        ]
-        sections.append({
-            "title": "Frequent application characteristics",
-            "columns": ["Characteristic", "Events"],
-            "rows": rows,
-        })
+        rows = [{"characteristic": value or "<blank>", "events": events} for value, events in exploded.iter_rows()]
+        sections.append(
+            {
+                "title": "Frequent application characteristics",
+                "columns": ["Characteristic", "Events"],
+                "rows": rows,
+            }
+        )
 
     report.sections = [s for s in sections if s is not None]
 
@@ -610,14 +615,18 @@ def run_unifi_analysis(
 
 @app.command("palo")
 def palo_command(
-    path: Path = typer.Argument(..., exists=True, file_okay=True, dir_okay=False, readable=True, help="Path to a Palo Alto syslog export"),
+    path: Path = typer.Argument(
+        ..., exists=True, file_okay=True, dir_okay=False, readable=True, help="Path to a Palo Alto syslog export"
+    ),
     top: int = typer.Option(5, help="Number of rows to show in each summary table."),
     noise_threshold: float = typer.Option(
         5.0,
         min=0.0,
         help="Flag policies/IPs whose event count is at least this percentage of total volume.",
     ),
-    progress: bool = typer.Option(True, "--progress/--no-progress", help="Display a progress bar while parsing the log."),
+    progress: bool = typer.Option(
+        True, "--progress/--no-progress", help="Display a progress bar while parsing the log."
+    ),
     export: Path | None = typer.Option(None, "--export", "-o", help="Export report to file (.html, .md, or .json)"),
 ) -> None:
     """Analyse Palo Alto Networks syslog traffic logs."""
@@ -626,14 +635,18 @@ def palo_command(
 
 @app.command("unifi")
 def unifi_command(
-    path: Path = typer.Argument(..., exists=True, file_okay=True, dir_okay=False, readable=True, help="Path to a UniFi device syslog export"),
+    path: Path = typer.Argument(
+        ..., exists=True, file_okay=True, dir_okay=False, readable=True, help="Path to a UniFi device syslog export"
+    ),
     top: int = typer.Option(10, help="Number of rows to show in each summary table."),
     noise_threshold: float = typer.Option(
         5.0,
         min=0.0,
         help="Flag processes/categories whose event count is at least this percentage of total volume.",
     ),
-    progress: bool = typer.Option(True, "--progress/--no-progress", help="Display a progress bar while parsing the log."),
+    progress: bool = typer.Option(
+        True, "--progress/--no-progress", help="Display a progress bar while parsing the log."
+    ),
     export: Path | None = typer.Option(None, "--export", "-o", help="Export report to file (.html, .md, or .json)"),
 ) -> None:
     """Analyse UniFi device syslog logs."""
@@ -688,14 +701,23 @@ def run_watchguard_analysis(
 
 @app.command("watchguard")
 def watchguard_command(
-    path: Path = typer.Argument(..., exists=True, file_okay=True, dir_okay=False, readable=True, help="Path to a WatchGuard firewall syslog export"),
+    path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="Path to a WatchGuard firewall syslog export",
+    ),
     top: int = typer.Option(10, help="Number of rows to show in each summary table."),
     noise_threshold: float = typer.Option(
         5.0,
         min=0.0,
         help="Flag processes/messages whose event count is at least this percentage of total volume.",
     ),
-    progress: bool = typer.Option(True, "--progress/--no-progress", help="Display a progress bar while parsing the log."),
+    progress: bool = typer.Option(
+        True, "--progress/--no-progress", help="Display a progress bar while parsing the log."
+    ),
     export: Path | None = typer.Option(None, "--export", "-o", help="Export report to file (.html, .md, or .json)"),
 ) -> None:
     """Analyse WatchGuard firewall syslog logs."""
@@ -752,14 +774,23 @@ def run_meraki_analysis(
 
 @app.command("meraki")
 def meraki_command(
-    path: Path = typer.Argument(..., exists=True, file_okay=True, dir_okay=False, readable=True, help="Path to a Meraki network device syslog export"),
+    path: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="Path to a Meraki network device syslog export",
+    ),
     top: int = typer.Option(10, help="Number of rows to show in each summary table."),
     noise_threshold: float = typer.Option(
         5.0,
         min=0.0,
         help="Flag event types/IPs whose count is at least this percentage of total volume.",
     ),
-    progress: bool = typer.Option(True, "--progress/--no-progress", help="Display a progress bar while parsing the log."),
+    progress: bool = typer.Option(
+        True, "--progress/--no-progress", help="Display a progress bar while parsing the log."
+    ),
     export: Path | None = typer.Option(None, "--export", "-o", help="Export report to file (.html, .md, or .json)"),
 ) -> None:
     """Analyse Meraki network device syslog logs."""

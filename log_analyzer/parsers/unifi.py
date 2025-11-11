@@ -100,7 +100,7 @@ class UniFiParser(LogParser):
 
                 # Check if line is JSON data (common in UniFi logs)
                 stripped = line.lstrip()
-                if stripped.startswith(('{', '}', '"', ']', '[')):
+                if stripped.startswith(("{", "}", '"', "]", "[")):
                     stats.note_failure("json-data")
                     continue
 
@@ -148,11 +148,7 @@ class UniFiParser(LogParser):
                 stats.note_success()
                 yield record
 
-    def load_dataframe(
-        self,
-        path: Path,
-        show_progress: bool = True
-    ) -> tuple[pl.DataFrame, ParseStats]:
+    def load_dataframe(self, path: Path, show_progress: bool = True) -> tuple[pl.DataFrame, ParseStats]:
         """Load UniFi log into DataFrame with transformations."""
         stats = ParseStats()
 
@@ -202,38 +198,39 @@ class UniFiParser(LogParser):
         # Since syslog doesn't include year, we'll use the file's modification time
         current_year = datetime.fromtimestamp(path.stat().st_mtime).year
 
-        frame = frame.with_columns([
-            # Create timestamp string with year
-            (
-                pl.lit(str(current_year)) + "-" +
-                pl.col("syslog_month") + "-" +
-                pl.col("syslog_day") + " " +
-                pl.col("syslog_time")
-            ).alias("timestamp_str")
-        ])
+        frame = frame.with_columns(
+            [
+                # Create timestamp string with year
+                (
+                    pl.lit(str(current_year))
+                    + "-"
+                    + pl.col("syslog_month")
+                    + "-"
+                    + pl.col("syslog_day")
+                    + " "
+                    + pl.col("syslog_time")
+                ).alias("timestamp_str")
+            ]
+        )
 
         # Parse the timestamp
-        frame = frame.with_columns([
-            pl.col("timestamp_str")
-            .str.strptime(pl.Datetime, format="%Y-%b-%d %H:%M:%S", strict=False)
-            .alias("timestamp")
-        ])
+        frame = frame.with_columns(
+            [
+                pl.col("timestamp_str")
+                .str.strptime(pl.Datetime, format="%Y-%b-%d %H:%M:%S", strict=False)
+                .alias("timestamp")
+            ]
+        )
 
         # Add minute bucket for trend analysis
         if "timestamp" in frame.columns:
-            frame = frame.with_columns([
-                pl.col("timestamp").dt.truncate("1m").alias("minute_bucket")
-            ])
+            frame = frame.with_columns([pl.col("timestamp").dt.truncate("1m").alias("minute_bucket")])
 
         # Convert PID to integer if present
         if "pid" in frame.columns:
-            frame = frame.with_columns([
-                pl.col("pid").cast(pl.Int32, strict=False).alias("pid")
-            ])
+            frame = frame.with_columns([pl.col("pid").cast(pl.Int32, strict=False).alias("pid")])
 
         # Add message length
-        frame = frame.with_columns([
-            pl.col("message").str.len_chars().alias("message_length")
-        ])
+        frame = frame.with_columns([pl.col("message").str.len_chars().alias("message_length")])
 
         return frame, stats

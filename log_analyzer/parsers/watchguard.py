@@ -34,9 +34,9 @@ def _infer_log_level_from_msg_id(msg_id: str | None, message: str) -> str:
     if msg_id:
         # WatchGuard message ID format: category-severity
         # Higher first digit generally means more important
-        if msg_id.startswith(('3001-', '0207-', '020B-')):  # Firewall blocks, VPN issues
+        if msg_id.startswith(("3001-", "0207-", "020B-")):  # Firewall blocks, VPN issues
             return "warning"
-        elif msg_id.startswith(('4001-', '7600-')):  # Critical events
+        elif msg_id.startswith(("4001-", "7600-")):  # Critical events
             return "error"
 
     # Check message content
@@ -125,11 +125,7 @@ class WatchGuardParser(LogParser):
                 stats.note_success()
                 yield record
 
-    def load_dataframe(
-        self,
-        path: Path,
-        show_progress: bool = True
-    ) -> tuple[pl.DataFrame, ParseStats]:
+    def load_dataframe(self, path: Path, show_progress: bool = True) -> tuple[pl.DataFrame, ParseStats]:
         """Load WatchGuard log into DataFrame with transformations."""
         stats = ParseStats()
 
@@ -179,27 +175,23 @@ class WatchGuardParser(LogParser):
         frame = pl.DataFrame(rows, schema=schema, strict=False)
 
         # Parse ISO timestamp
-        frame = frame.with_columns([
-            pl.col("iso_timestamp")
-            .str.strptime(pl.Datetime, format="%Y-%m-%dT%H:%M:%S", strict=False)
-            .alias("timestamp")
-        ])
+        frame = frame.with_columns(
+            [
+                pl.col("iso_timestamp")
+                .str.strptime(pl.Datetime, format="%Y-%m-%dT%H:%M:%S", strict=False)
+                .alias("timestamp")
+            ]
+        )
 
         # Add minute bucket for trend analysis
         if "timestamp" in frame.columns:
-            frame = frame.with_columns([
-                pl.col("timestamp").dt.truncate("1m").alias("minute_bucket")
-            ])
+            frame = frame.with_columns([pl.col("timestamp").dt.truncate("1m").alias("minute_bucket")])
 
         # Convert PID to integer if present
         if "pid" in frame.columns:
-            frame = frame.with_columns([
-                pl.col("pid").cast(pl.Int32, strict=False).alias("pid")
-            ])
+            frame = frame.with_columns([pl.col("pid").cast(pl.Int32, strict=False).alias("pid")])
 
         # Add message length
-        frame = frame.with_columns([
-            pl.col("message").str.len_chars().alias("message_length")
-        ])
+        frame = frame.with_columns([pl.col("message").str.len_chars().alias("message_length")])
 
         return frame, stats

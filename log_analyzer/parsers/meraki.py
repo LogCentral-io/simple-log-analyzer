@@ -32,7 +32,7 @@ def _parse_key_value_pairs(text: str) -> dict[str, str]:
     """Parse key=value pairs from Meraki log messages."""
     pairs = {}
     # Pattern for key=value or key: value
-    pattern = re.compile(r'(\w+)[:=]([^\s]+)')
+    pattern = re.compile(r"(\w+)[:=]([^\s]+)")
     for match in pattern.finditer(text):
         key, value = match.groups()
         pairs[key] = value
@@ -123,18 +123,23 @@ class MerakiParser(LogParser):
                 }
 
                 # Add common key-value pairs
-                for key in ["src", "dst", "protocol", "sport", "dport", "mac",
-                           "translated_src_ip", "translated_port", "pattern"]:
+                for key in [
+                    "src",
+                    "dst",
+                    "protocol",
+                    "sport",
+                    "dport",
+                    "mac",
+                    "translated_src_ip",
+                    "translated_port",
+                    "pattern",
+                ]:
                     record[key] = kv_pairs.get(key)
 
                 stats.note_success()
                 yield record
 
-    def load_dataframe(
-        self,
-        path: Path,
-        show_progress: bool = True
-    ) -> tuple[pl.DataFrame, ParseStats]:
+    def load_dataframe(self, path: Path, show_progress: bool = True) -> tuple[pl.DataFrame, ParseStats]:
         """Load Meraki log into DataFrame with transformations."""
         stats = ParseStats()
 
@@ -191,31 +196,27 @@ class MerakiParser(LogParser):
         frame = pl.DataFrame(rows, schema=schema, strict=False)
 
         # Parse epoch timestamp to datetime
-        frame = frame.with_columns([
-            pl.col("epoch_timestamp")
-            .cast(pl.Float64, strict=False)
-            .cast(pl.Int64)  # Convert to microseconds
-            .mul(1_000_000)
-            .cast(pl.Datetime("us"), strict=False)
-            .alias("timestamp")
-        ])
+        frame = frame.with_columns(
+            [
+                pl.col("epoch_timestamp")
+                .cast(pl.Float64, strict=False)
+                .cast(pl.Int64)  # Convert to microseconds
+                .mul(1_000_000)
+                .cast(pl.Datetime("us"), strict=False)
+                .alias("timestamp")
+            ]
+        )
 
         # Add minute bucket for trend analysis
         if "timestamp" in frame.columns:
-            frame = frame.with_columns([
-                pl.col("timestamp").dt.truncate("1m").alias("minute_bucket")
-            ])
+            frame = frame.with_columns([pl.col("timestamp").dt.truncate("1m").alias("minute_bucket")])
 
         # Convert ports to integers
         for port_col in ["sport", "dport", "translated_port"]:
             if port_col in frame.columns:
-                frame = frame.with_columns([
-                    pl.col(port_col).cast(pl.Int32, strict=False).alias(port_col)
-                ])
+                frame = frame.with_columns([pl.col(port_col).cast(pl.Int32, strict=False).alias(port_col)])
 
         # Add message length
-        frame = frame.with_columns([
-            pl.col("message").str.len_chars().alias("message_length")
-        ])
+        frame = frame.with_columns([pl.col("message").str.len_chars().alias("message_length")])
 
         return frame, stats

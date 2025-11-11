@@ -13,6 +13,7 @@ import polars as pl
 @dataclass(slots=True)
 class ParseStats:
     """Statistics about parsing operations."""
+
     total_lines: int = 0
     parsed: int = 0
     rejected: dict[str, int] = field(default_factory=dict)
@@ -42,11 +43,7 @@ class LogParser(ABC):
         pass
 
     @abstractmethod
-    def load_dataframe(
-        self,
-        path: Path,
-        show_progress: bool = True
-    ) -> tuple[pl.DataFrame, ParseStats]:
+    def load_dataframe(self, path: Path, show_progress: bool = True) -> tuple[pl.DataFrame, ParseStats]:
         """Load log file into a Polars DataFrame with transformations."""
         pass
 

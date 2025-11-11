@@ -121,7 +121,7 @@ class PaloAltoParser(LogParser):
                     stats.note_failure("missing-prefix")
                     continue
 
-                rest = line[prefix.end():]
+                rest = line[prefix.end() :]
                 try:
                     fields = next(csv.reader([rest]))
                 except csv.Error as exc:
@@ -142,11 +142,7 @@ class PaloAltoParser(LogParser):
                 stats.note_success()
                 yield record
 
-    def load_dataframe(
-        self,
-        path: Path,
-        show_progress: bool = True
-    ) -> tuple[pl.DataFrame, ParseStats]:
+    def load_dataframe(self, path: Path, show_progress: bool = True) -> tuple[pl.DataFrame, ParseStats]:
         """Load Palo Alto log into DataFrame with transformations."""
         stats = ParseStats()
 
@@ -198,19 +194,27 @@ class PaloAltoParser(LogParser):
         transformations = []
         if "receive_time" in frame.columns:
             transformations.append(
-                pl.col("receive_time").str.strptime(pl.Datetime, format="%Y/%m/%d %H:%M:%S", strict=False).alias("receive_time_ts")
+                pl.col("receive_time")
+                .str.strptime(pl.Datetime, format="%Y/%m/%d %H:%M:%S", strict=False)
+                .alias("receive_time_ts")
             )
         if "generated_time" in frame.columns:
             transformations.append(
-                pl.col("generated_time").str.strptime(pl.Datetime, format="%Y/%m/%d %H:%M:%S", strict=False).alias("generated_time_ts")
+                pl.col("generated_time")
+                .str.strptime(pl.Datetime, format="%Y/%m/%d %H:%M:%S", strict=False)
+                .alias("generated_time_ts")
             )
         if "session_start_time" in frame.columns:
             transformations.append(
-                pl.col("session_start_time").str.strptime(pl.Datetime, format="%Y/%m/%d %H:%M:%S", strict=False).alias("session_start_ts")
+                pl.col("session_start_time")
+                .str.strptime(pl.Datetime, format="%Y/%m/%d %H:%M:%S", strict=False)
+                .alias("session_start_ts")
             )
         if "generated_timestamp" in frame.columns:
             transformations.append(
-                pl.col("generated_timestamp").str.to_datetime(time_zone="UTC", strict=False).alias("generated_timestamp_ts")
+                pl.col("generated_timestamp")
+                .str.to_datetime(time_zone="UTC", strict=False)
+                .alias("generated_timestamp_ts")
             )
 
         numeric_columns = [
@@ -240,8 +244,6 @@ class PaloAltoParser(LogParser):
             frame = frame.with_columns(transformations)
 
         if "receive_time_ts" in frame.columns:
-            frame = frame.with_columns(
-                pl.col("receive_time_ts").dt.truncate("1m").alias("minute_bucket")
-            )
+            frame = frame.with_columns(pl.col("receive_time_ts").dt.truncate("1m").alias("minute_bucket"))
 
         return frame, stats
