@@ -33,22 +33,22 @@ A high-performance Python tool for analyzing syslog files from various network d
 
 ### Prerequisites
 
-- Python 3.12+
+- Python 3.11+
 - [uv](https://github.com/astral-sh/uv) (recommended) or pip
 
 ### Using uv (recommended)
 
 ```bash
-git clone https://github.com/yourusername/log-analyzer.git
-cd log-analyzer
+git clone https://github.com/LogCentral-io/simple-log-analyzer.git
+cd simple-log-analyzer
 uv sync
 ```
 
 ### Using pip
 
 ```bash
-git clone https://github.com/yourusername/log-analyzer.git
-cd log-analyzer
+git clone https://github.com/LogCentral-io/simple-log-analyzer.git
+cd simple-log-analyzer
 pip install -e .
 ```
 
