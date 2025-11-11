@@ -1,16 +1,104 @@
 [project]
 name = "log-analyzer"
 version = "0.1.0"
-description = "CLI utilities for exploring Palo Alto Networks syslog exports"
+description = "Multi-format log analyzer for network device logs (Palo Alto, UniFi, WatchGuard, Meraki)"
+readme = "README.md"
 requires-python = ">=3.11"
+license = {file = "LICENSE"}
+authors = [
+    {name = "LogCentral.io"}
+]
+keywords = ["log-analyzer", "syslog", "palo-alto", "unifi", "watchguard", "meraki", "network-logs"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Logging",
+    "Topic :: System :: Monitoring",
+    "Topic :: System :: Networking",
+]
 dependencies = [
     "polars>=0.20",
     "typer>=0.12",
     "rich>=13.7",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "mypy>=1.7",
+    "ruff>=0.1",
+    "pre-commit>=3.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/LogCentral-io/simple-log-analyzer"
+Repository = "https://github.com/LogCentral-io/simple-log-analyzer"
+Issues = "https://github.com/LogCentral-io/simple-log-analyzer/issues"
+
 [project.scripts]
 log-analyzer = "log_analyzer.cli:cli"
 
 [tool.uv]
 package = true
+dev-dependencies = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "mypy>=1.7",
+    "ruff>=0.1",
+    "pre-commit>=3.5",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501", # line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--cov=log_analyzer",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]
