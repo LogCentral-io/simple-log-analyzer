@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Iterable
 
 import polars as pl
 from rich.console import Console
@@ -107,7 +107,7 @@ class UniFiParser(LogParser):
                 # Try CEF format first (security events)
                 cef_match = CEF_PATTERN.match(line)
                 if cef_match:
-                    record: dict[str, str | None] = {
+                    cef_record: dict[str, str | None] = {
                         "syslog_month": cef_match["month"],
                         "syslog_day": cef_match["day"],
                         "syslog_time": cef_match["time"],
@@ -120,7 +120,7 @@ class UniFiParser(LogParser):
                         "category": "unifi-security",
                     }
                     stats.note_success()
-                    yield record
+                    yield cef_record
                     continue
 
                 # Try standard syslog format

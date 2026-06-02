@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from html import escape as html_escape
 from pathlib import Path
-from typing import Sequence
+from typing import Annotated, Any, Literal
 
 import polars as pl
 import typer
@@ -13,13 +14,15 @@ from rich.console import Console
 from rich.table import Table
 
 from .parsers import ParseStats
+from .parsers.meraki import MerakiParser
 from .parsers.palo_alto import PaloAltoParser
 from .parsers.unifi import UniFiParser
 from .parsers.watchguard import WatchGuardParser
-from .parsers.meraki import MerakiParser
 
 console = Console()
 app = typer.Typer(help="Multi-format log analyzer supporting various network device logs")
+
+EXPORT_METADATA_KEYS = {"events", "bytes", "bytes_formatted", "share", "message_length", "length"}
 
 
 def format_bytes(value: int | None) -> str:
@@ -37,7 +40,7 @@ def format_bytes(value: int | None) -> str:
 def to_table(title: str, columns: Sequence[str], rows: Sequence[Sequence[str]]) -> Table:
     table = Table(title=title, title_style="bold", show_lines=False, expand=True)
     for name in columns:
-        justify = "left"
+        justify: Literal["left", "right"] = "left"
         if name.lower().endswith(("count", "bytes", "events", "score", "length")):
             justify = "right"
         table.add_column(name, justify=justify, overflow="fold")
@@ -275,6 +278,41 @@ def collect_noise_candidates(
     }
 
 
+def report_cell_value(row: dict[str, Any], column: str) -> Any:
+    """Return the display value for a report section cell."""
+    if column == "Events":
+        return f"{row['events']:,}"
+    if "Bytes" in column:
+        return row.get("bytes_formatted", format_bytes(row.get("bytes")))
+    if "Share" in column:
+        return f"{row.get('share', 0):.1f}%"
+    if "Length" in column:
+        return row.get("message_length", row.get("length", ""))
+
+    for key, value in row.items():
+        if key not in EXPORT_METADATA_KEYS:
+            return value
+
+    return ""
+
+
+def escape_html_cell(value: Any) -> str:
+    """Escape untrusted report values for HTML text nodes."""
+    if value is None:
+        return ""
+    return html_escape(str(value), quote=True)
+
+
+def escape_markdown_cell(value: Any) -> str:
+    """Escape untrusted report values for Markdown table cells."""
+    if value is None:
+        return ""
+    text = str(value)
+    text = text.replace("\\", "\\\\").replace("|", "\\|")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    return html_escape(text, quote=False).replace("\n", "<br>")
+
+
 def print_report(report: ReportData) -> None:
     """Print report to console."""
     console.print(f"[bold]Parser:[/bold] {report.parser_name}")
@@ -298,7 +336,7 @@ def print_report(report: ReportData) -> None:
                 col_key = col.lower().replace(" ", "_").replace(".", "")
                 # Try to find the matching key in the row
                 value = None
-                for key in row.keys():
+                for key in row:
                     if key == col_key or key.replace("_", "") == col_key.replace("_", ""):
                         value = row[key]
                         break
@@ -328,12 +366,13 @@ def print_report(report: ReportData) -> None:
 
 def export_to_html(report: ReportData, path: Path) -> None:
     """Export report as HTML."""
+    title = escape_html_cell(f"{report.parser_name} Log Analysis Report")
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{report.parser_name} Log Analysis Report</title>
+    <title>{title}</title>
     <style>
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; margin: 20px; background-color: #f5f5f5; }}
         .container {{ max-width: 1400px; margin: 0 auto; background-color: white; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
@@ -353,52 +392,40 @@ def export_to_html(report: ReportData, path: Path) -> None:
 </head>
 <body>
     <div class="container">
-        <h1>{report.parser_name} Log Analysis Report</h1>
+        <h1>{title}</h1>
         <div class="meta">
-            <p><strong>Source:</strong> {report.source_path.name}</p>
-            <p><strong>Parser:</strong> {report.parser_name}</p>
-            <p><strong>Generated:</strong> {report.generated_at.strftime("%Y-%m-%d %H:%M:%S")}</p>
+            <p><strong>Source:</strong> {escape_html_cell(report.source_path.name)}</p>
+            <p><strong>Parser:</strong> {escape_html_cell(report.parser_name)}</p>
+            <p><strong>Generated:</strong> {escape_html_cell(report.generated_at.strftime("%Y-%m-%d %H:%M:%S"))}</p>
             <p><strong>Records Parsed:</strong> {report.stats.parsed:,} / {report.stats.total_lines:,} total lines</p>
 """
 
     if report.stats.rejected:
-        rejection_details = ", ".join(f"{reason}={count}" for reason, count in report.stats.rejected.items())
+        rejection_details = escape_html_cell(
+            ", ".join(f"{reason}={count}" for reason, count in report.stats.rejected.items())
+        )
         html += f"            <p class='warning'><strong>Skipped Lines:</strong> {rejection_details}</p>\n"
 
     html += "        </div>\n"
 
     for section in report.sections:
-        html += f"        <h2>{section['title']}</h2>\n"
+        html += f"        <h2>{escape_html_cell(section['title'])}</h2>\n"
         html += "        <table>\n"
         html += "            <thead><tr>"
 
         for col in section["columns"]:
             align_class = " class='numeric'" if any(x in col for x in ["Events", "Bytes", "Share"]) else ""
-            html += f"<th{align_class}>{col}</th>"
+            html += f"<th{align_class}>{escape_html_cell(col)}</th>"
 
         html += "</tr></thead>\n            <tbody>\n"
 
         for row in section["rows"]:
             html += "                <tr>"
             for col in section["columns"]:
-                # Find matching value in row
-                value = None
                 numeric = any(x in col for x in ["Events", "Bytes", "Share"])
-
-                if col == "Events":
-                    value = f"{row['events']:,}"
-                elif "Bytes" in col:
-                    value = row.get("bytes_formatted", format_bytes(row.get("bytes")))
-                elif "Share" in col:
-                    value = f"{row['share']:.1f}%"
-                else:
-                    for k, v in row.items():
-                        if k not in ["events", "bytes", "bytes_formatted", "share"]:
-                            value = v
-                            break
-
+                value = report_cell_value(row, col)
                 align_class = " class='numeric'" if numeric else ""
-                html += f"<td{align_class}>{value if value is not None else ''}</td>"
+                html += f"<td{align_class}>{escape_html_cell(value)}</td>"
 
             html += "</tr>\n"
 
@@ -413,24 +440,26 @@ def export_to_html(report: ReportData, path: Path) -> None:
 
 def export_to_markdown(report: ReportData, path: Path) -> None:
     """Export report as Markdown."""
-    md = f"""# {report.parser_name} Log Analysis Report
+    md = f"""# {escape_markdown_cell(report.parser_name)} Log Analysis Report
 
-**Source:** {report.source_path.name}
-**Parser:** {report.parser_name}
+**Source:** {escape_markdown_cell(report.source_path.name)}
+**Parser:** {escape_markdown_cell(report.parser_name)}
 **Generated:** {report.generated_at.strftime("%Y-%m-%d %H:%M:%S")}
 **Records Parsed:** {report.stats.parsed:,} / {report.stats.total_lines:,} total lines
 
 """
 
     if report.stats.rejected:
-        rejection_details = ", ".join(f"{reason}={count}" for reason, count in report.stats.rejected.items())
+        rejection_details = escape_markdown_cell(
+            ", ".join(f"{reason}={count}" for reason, count in report.stats.rejected.items())
+        )
         md += f"**Skipped Lines:** {rejection_details}\n\n"
 
     for section in report.sections:
-        md += f"## {section['title']}\n\n"
+        md += f"## {escape_markdown_cell(section['title'])}\n\n"
 
         # Create table header
-        md += "| " + " | ".join(section["columns"]) + " |\n"
+        md += "| " + " | ".join(escape_markdown_cell(column) for column in section["columns"]) + " |\n"
         md += (
             "|"
             + "|".join(
@@ -446,19 +475,7 @@ def export_to_markdown(report: ReportData, path: Path) -> None:
         for row in section["rows"]:
             row_values = []
             for col in section["columns"]:
-                if col == "Events":
-                    value = f"{row['events']:,}"
-                elif "Bytes" in col:
-                    value = row.get("bytes_formatted", format_bytes(row.get("bytes")))
-                elif "Share" in col:
-                    value = f"{row['share']:.1f}%"
-                else:
-                    value = None
-                    for k, v in row.items():
-                        if k not in ["events", "bytes", "bytes_formatted", "share"]:
-                            value = v
-                            break
-                row_values.append(str(value) if value is not None else "")
+                row_values.append(escape_markdown_cell(report_cell_value(row, col)))
 
             md += "| " + " | ".join(row_values) + " |\n"
 
@@ -615,19 +632,26 @@ def run_unifi_analysis(
 
 @app.command("palo")
 def palo_command(
-    path: Path = typer.Argument(
-        ..., exists=True, file_okay=True, dir_okay=False, readable=True, help="Path to a Palo Alto syslog export"
-    ),
-    top: int = typer.Option(5, help="Number of rows to show in each summary table."),
-    noise_threshold: float = typer.Option(
-        5.0,
-        min=0.0,
-        help="Flag policies/IPs whose event count is at least this percentage of total volume.",
-    ),
-    progress: bool = typer.Option(
-        True, "--progress/--no-progress", help="Display a progress bar while parsing the log."
-    ),
-    export: Path | None = typer.Option(None, "--export", "-o", help="Export report to file (.html, .md, or .json)"),
+    path: Annotated[
+        Path,
+        typer.Argument(
+            exists=True, file_okay=True, dir_okay=False, readable=True, help="Path to a Palo Alto syslog export"
+        ),
+    ],
+    top: Annotated[int, typer.Option(help="Number of rows to show in each summary table.")] = 5,
+    noise_threshold: Annotated[
+        float,
+        typer.Option(
+            min=0.0,
+            help="Flag policies/IPs whose event count is at least this percentage of total volume.",
+        ),
+    ] = 5.0,
+    progress: Annotated[
+        bool, typer.Option("--progress/--no-progress", help="Display a progress bar while parsing the log.")
+    ] = True,
+    export: Annotated[
+        Path | None, typer.Option("--export", "-o", help="Export report to file (.html, .md, or .json)")
+    ] = None,
 ) -> None:
     """Analyse Palo Alto Networks syslog traffic logs."""
     run_palo_analysis(path, top, noise_threshold, progress, export)
@@ -635,19 +659,26 @@ def palo_command(
 
 @app.command("unifi")
 def unifi_command(
-    path: Path = typer.Argument(
-        ..., exists=True, file_okay=True, dir_okay=False, readable=True, help="Path to a UniFi device syslog export"
-    ),
-    top: int = typer.Option(10, help="Number of rows to show in each summary table."),
-    noise_threshold: float = typer.Option(
-        5.0,
-        min=0.0,
-        help="Flag processes/categories whose event count is at least this percentage of total volume.",
-    ),
-    progress: bool = typer.Option(
-        True, "--progress/--no-progress", help="Display a progress bar while parsing the log."
-    ),
-    export: Path | None = typer.Option(None, "--export", "-o", help="Export report to file (.html, .md, or .json)"),
+    path: Annotated[
+        Path,
+        typer.Argument(
+            exists=True, file_okay=True, dir_okay=False, readable=True, help="Path to a UniFi device syslog export"
+        ),
+    ],
+    top: Annotated[int, typer.Option(help="Number of rows to show in each summary table.")] = 10,
+    noise_threshold: Annotated[
+        float,
+        typer.Option(
+            min=0.0,
+            help="Flag processes/categories whose event count is at least this percentage of total volume.",
+        ),
+    ] = 5.0,
+    progress: Annotated[
+        bool, typer.Option("--progress/--no-progress", help="Display a progress bar while parsing the log.")
+    ] = True,
+    export: Annotated[
+        Path | None, typer.Option("--export", "-o", help="Export report to file (.html, .md, or .json)")
+    ] = None,
 ) -> None:
     """Analyse UniFi device syslog logs."""
     run_unifi_analysis(path, top, noise_threshold, progress, export)
@@ -701,24 +732,30 @@ def run_watchguard_analysis(
 
 @app.command("watchguard")
 def watchguard_command(
-    path: Path = typer.Argument(
-        ...,
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        help="Path to a WatchGuard firewall syslog export",
-    ),
-    top: int = typer.Option(10, help="Number of rows to show in each summary table."),
-    noise_threshold: float = typer.Option(
-        5.0,
-        min=0.0,
-        help="Flag processes/messages whose event count is at least this percentage of total volume.",
-    ),
-    progress: bool = typer.Option(
-        True, "--progress/--no-progress", help="Display a progress bar while parsing the log."
-    ),
-    export: Path | None = typer.Option(None, "--export", "-o", help="Export report to file (.html, .md, or .json)"),
+    path: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+            help="Path to a WatchGuard firewall syslog export",
+        ),
+    ],
+    top: Annotated[int, typer.Option(help="Number of rows to show in each summary table.")] = 10,
+    noise_threshold: Annotated[
+        float,
+        typer.Option(
+            min=0.0,
+            help="Flag processes/messages whose event count is at least this percentage of total volume.",
+        ),
+    ] = 5.0,
+    progress: Annotated[
+        bool, typer.Option("--progress/--no-progress", help="Display a progress bar while parsing the log.")
+    ] = True,
+    export: Annotated[
+        Path | None, typer.Option("--export", "-o", help="Export report to file (.html, .md, or .json)")
+    ] = None,
 ) -> None:
     """Analyse WatchGuard firewall syslog logs."""
     run_watchguard_analysis(path, top, noise_threshold, progress, export)
@@ -774,24 +811,30 @@ def run_meraki_analysis(
 
 @app.command("meraki")
 def meraki_command(
-    path: Path = typer.Argument(
-        ...,
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        help="Path to a Meraki network device syslog export",
-    ),
-    top: int = typer.Option(10, help="Number of rows to show in each summary table."),
-    noise_threshold: float = typer.Option(
-        5.0,
-        min=0.0,
-        help="Flag event types/IPs whose count is at least this percentage of total volume.",
-    ),
-    progress: bool = typer.Option(
-        True, "--progress/--no-progress", help="Display a progress bar while parsing the log."
-    ),
-    export: Path | None = typer.Option(None, "--export", "-o", help="Export report to file (.html, .md, or .json)"),
+    path: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+            help="Path to a Meraki network device syslog export",
+        ),
+    ],
+    top: Annotated[int, typer.Option(help="Number of rows to show in each summary table.")] = 10,
+    noise_threshold: Annotated[
+        float,
+        typer.Option(
+            min=0.0,
+            help="Flag event types/IPs whose count is at least this percentage of total volume.",
+        ),
+    ] = 5.0,
+    progress: Annotated[
+        bool, typer.Option("--progress/--no-progress", help="Display a progress bar while parsing the log.")
+    ] = True,
+    export: Annotated[
+        Path | None, typer.Option("--export", "-o", help="Export report to file (.html, .md, or .json)")
+    ] = None,
 ) -> None:
     """Analyse Meraki network device syslog logs."""
     run_meraki_analysis(path, top, noise_threshold, progress, export)

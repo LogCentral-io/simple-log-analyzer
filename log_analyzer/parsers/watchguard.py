@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Iterable
 
 import polars as pl
 from rich.console import Console

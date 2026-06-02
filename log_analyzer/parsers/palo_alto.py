@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import csv
 import re
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Iterable
 
 import polars as pl
 from rich.console import Console
@@ -183,12 +183,12 @@ class PaloAltoParser(LogParser):
         seen = set(base_columns)
         ordered_columns: list[str] = [col for col in base_columns if col is not None]
         for row in rows:
-            for key in row.keys():
+            for key in row:
                 if key not in seen:
                     ordered_columns.append(key)
                     seen.add(key)
 
-        schema = {column: pl.Utf8 for column in ordered_columns}
+        schema = dict.fromkeys(ordered_columns, pl.Utf8)
         frame = pl.DataFrame(rows, schema=schema, strict=False)
 
         transformations = []

@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Iterable
 
 import polars as pl
 from rich.console import Console
@@ -48,10 +47,6 @@ def _infer_log_level(event_type: str, message: str) -> str:
     elif event_type == "events":
         if "error" in message.lower() or "fail" in message.lower():
             return "error"
-        return "info"
-    elif event_type in ["ip_flow_start", "ip_flow_end"]:
-        return "info"
-    elif event_type == "urls":
         return "info"
     else:
         return "info"
